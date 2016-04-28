@@ -1,6 +1,7 @@
 global
     maxconn {{or (key "service/haproxy/maxconn") 256}}
     debug
+    log {{or (key "service/haproxy/logserver") "172.18.0.1"}}
 
 defaults
     mode tcp
@@ -12,12 +13,13 @@ defaults
 frontend www
     mode http
     bind *:80
+    log global
 
-    {{range ls "marathon"}}
+    {{range ls "marathon"-}}
     {{with $root := .}}{{with $app := parseJSON $root.Value}}{{with $tasks := ls (printf "marathon/%s/tasks" $root.Key)}}
-    {{if eq (print $app.labels.HAPROXY_HTTP) "true"}}
+    {{if eq (print $app.labels.HAPROXY_HTTP) "true"-}}
     # {{$root.Key}} ACLs
-    {{range $index, $port := $app.ports}}{{with $localName := index $app.labels (printf "HTTP_PORT_IDX_%d_NAME" $index)}}
+    {{range $index, $port := $app.ports}}{{with $localName := index $app.labels (printf "HTTP_PORT_IDX_%d_NAME" $index)-}}
     acl host_{{$localName}} hdr(host) -i {{$localName}}.{{or (env "HAPROXY_DOMAIN") "haproxy.service.consul"}}
     use_backend {{$localName}}_backend if host_{{$localName}}
     {{else}}
