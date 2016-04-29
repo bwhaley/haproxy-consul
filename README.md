@@ -44,7 +44,7 @@ docker build -t haproxy .
 haproxy-consul can run in two different modes: forwarding either consul services
 (the default) or Marathon apps. This behavior is controlled by the
 `HAPROXY_MODE` variable, which should be set to `consul` or
-`marathon`.
+`marathon` or `marathon-sni`.
 
 #### consul Configuration
 
@@ -135,6 +135,58 @@ listen hello-rails_10000
     server task_id 1.2.3.4:41965 # TASK_RUNNING
 ```
 
+#### Marathon SNI Configuration
+When `HAPROXY_HTTPS` is set to true HAProxy uses TCP mode with SNI. consul-template will render an HAProxy configuration like this one:
+
+```
+# TLS passthrough with SNI frontend
+frontend sni
+    mode tcp
+    bind *:443
+    log global
+    option tcplog
+
+   tcp-request inspect-delay 5s
+   tcp-request content accept if { req_ssl_hello_type 1 }
+    # your-app
+    use_backend your-app if { req_ssl_sni -i your-app }
+
+
+# TLS passthrough with SNI backend
+# shield-handshake-1 backends
+backend shield-handshake-1_backend
+    mode tcp
+
+    # maximum SSL session ID length is 32 bytes.
+    stick-table type binary len 32 size 30k expire 30m
+
+    acl clienthello req_ssl_hello_type 1
+    acl serverhello rep_ssl_hello_type 2
+
+    # use tcp content accepts to detects ssl client and server hello.
+    tcp-request inspect-delay 5s
+    tcp-request content accept if clienthello
+
+    # no timeout on response inspect delay by default.
+    tcp-response content accept if serverhello
+
+    stick on payload_lv(43,1) if clienthello
+
+    # Learn on response if server hello.
+    stick store-response payload_lv(43,1) if serverhello
+
+    option ssl-hello-chk
+    option log-health-checks
+    default-server inter 10s fall 2
+    server your-app.d4b70da5-0da5-11e6-a62e-0a494cd57ceb 172.17.46.121:31128 check # TASK_RUNNING
+```
+
+Remember that SNI does not use the HTTP Host: header but rather the dns name that was requested. If you want to test using `curl`, try:
+
+```
+curl -k -v -1 --resolve your-app:443:127.0.0.1 https://your-app
+```
+
 ### Usage
 
 If you don't want to configure wildcard dns, you can use xip.io. In this example, we are going to assume that the IP of your server is `180.19.20.21`, then all domains in `180.19.20.21.xip.io` will forward to your host.
@@ -190,7 +242,7 @@ Variable | Description | Default
 `CONSUL_CONNECT`  | The consul connection | `consul.service.consul:8500`
 `CONSUL_CONFIG`   | File/directory for consul-template config | `/consul-template/config.d`
 `CONSUL_LOGLEVEL` | Valid values are "debug", "info", "warn", and "err". | `debug`
-`CONSUL_TOKEN`    | The [Consul API token](http://www.consul.io/docs/internals/acl.html) | 
+`CONSUL_TOKEN`    | The [Consul API token](http://www.consul.io/docs/internals/acl.html) |
 
 consul KV variables:
 

@@ -16,20 +16,21 @@ frontend sni
     mode tcp
     bind *:443
     log global
+    option tcplog
+
+    tcp-request inspect-delay 5s
+    tcp-request content accept if { req_ssl_hello_type 1 }
 
     {{range ls "marathon" -}}
     {{with $root := . -}}
     {{with $app := parseJSON $root.Value -}}
     {{with $tasks := ls (printf "marathon/%s/tasks" $root.Key) -}}
-    tcp-request inspect-delay 5s
-    tcp-request content accept if { req_ssl_hello_type 1 }
 
     {{if eq (print $app.labels.HAPROXY_HTTPS) "true" -}}
     {{range $index, $port := $app.ports -}}
     {{with $localName := index $app.labels (printf "HTTP_PORT_IDX_%d_NAME" $index) -}}
     # {{$localName}}
-    acl host_{{$localName}} req_ssl_sni -i {{$localName}}
-    use_backend {{$localName}}_backend if host_{{$localName}}
+    use_backend {{$localName}}_backend if { req_ssl_sni -i {{$localName}} }
     {{end}}{{/* end with localName */ -}}
     {{end}}{{/* end of range $index, $port */ -}}
     {{end}}{{/* end of if eq printf */ -}}
