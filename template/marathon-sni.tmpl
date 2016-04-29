@@ -1,0 +1,83 @@
+global
+    maxconn {{or (key "service/haproxy/maxconn") 256}}
+    debug
+    log {{or (key "service/haproxy/logserver") "172.18.0.1"}} local0
+
+defaults
+    mode tcp
+    timeout connect {{or (key "service/haproxy/timeouts/connect") "5000ms"}}
+    timeout client {{or (key "service/haproxy/timeouts/client") "50000ms"}}
+    timeout server {{or (key "service/haproxy/timeouts/server") "50000ms"}}
+
+# TLS passthrough with SNI frontend
+frontend sni
+    mode tcp
+    bind *:443
+    log global
+
+    {{range ls "marathon" -}}
+    {{with $root := . -}}
+    {{with $app := parseJSON $root.Value -}}
+    {{with $tasks := ls (printf "marathon/%s/tasks" $root.Key) -}}
+    tcp-request inspect-delay 5s
+    tcp-request content accept if { req_ssl_hello_type 1 }
+
+    {{if eq (print $app.labels.HAPROXY_HTTPS) "true" -}}
+    {{range $index, $port := $app.ports -}}
+    {{with $localName := index $app.labels (printf "HTTP_PORT_IDX_%d_NAME" $index) -}}
+    # $localName
+    acl host_{{$localName}} req_ssl_sni -i {{$localName}}
+    use_backend {{$localName}}_backend if host_{{$localName}}
+    {{end}}{{/* end with localName */ -}}
+    {{end}}{{/* end of range $index, $port */ -}}
+    {{end}}{{/* end of if eq printf */ -}}
+    {{end}}{{end}}{{end}}{{/* end of with $root, $app, and $tasks */ -}}
+    {{end}}{{/* end of range "marathon" */}}
+
+# TLS passthrough with SNI backend
+{{range ls "marathon" -}}
+{{with $root := . -}}
+{{with $app := parseJSON $root.Value -}}
+{{if eq (print $app.labels.HAPROXY_HTTPS) "true" -}}
+# {{$root.Key}} backends
+{{range $index, $port := $app.ports -}}
+{{with $localName := index $app.labels (printf "HTTP_PORT_IDX_%d_NAME" $index) -}}
+{{with $tasks := ls (printf "marathon/%s/tasks" $root.Key) -}}
+backend {{$localName}}_backend
+    mode tcp
+ 
+    # maximum SSL session ID length is 32 bytes.
+    stick-table type binary len 32 size 30k expire 30m
+ 
+    acl clienthello req_ssl_hello_type 1
+    acl serverhello rep_ssl_hello_type 2
+   
+    # use tcp content accepts to detects ssl client and server hello.
+    tcp-request inspect-delay 5s
+    tcp-request content accept if clienthello
+   
+    # no timeout on response inspect delay by default.
+    tcp-response content accept if serverhello
+   
+    stick on payload_lv(43,1) if clienthello
+   
+    # Learn on response if server hello.
+    stick store-response payload_lv(43,1) if serverhello
+   
+    option ssl-hello-chk
+    option log-health-checks
+    default-server inter 10s fall 2
+    {{range $taskIndex, $taskJson := $tasks -}}
+    {{with $task := parseJSON $taskJson.Value -}}
+    server {{$task.id}} {{$task.host}}:{{index $task.ports $index}} check # {{$task.taskStatus}}
+    {{end}}{{/* end for with $task */ -}}
+    {{end}}{{/* end for range $taskIndex, $taskJson... */ -}}
+    {{end}}{{/* end for with $tasks */ -}}
+    {{end}}{{/* end with $localName */ -}}
+    {{end}}{{/* end range over $app.ports */ -}}
+    {{end}}{{/* end if eq ... */ -}}
+    {{end}}{{/* end with $app */ -}}
+    {{end}}{{/* end with $root */ -}}
+    {{end}}{{/* end range over marathon tasks */}}
+    
+
