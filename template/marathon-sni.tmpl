@@ -2,6 +2,8 @@ global
     maxconn {{or (key "service/haproxy/maxconn") 256}}
     debug
     log {{or (key "service/haproxy/logserver") "172.18.0.1"}} local0
+    stats socket /var/run/haproxy.sock mode 600 level admin
+    stats timeout 2m #Wait up to 2 minutes for input
 
 defaults
     mode tcp
@@ -79,11 +81,3 @@ backend {{$localName}}_backend
     {{end}}{{/* end with $app */ -}}
     {{end}}{{/* end with $root */ -}}
     {{end}}{{/* end range over marathon tasks */}}
-
-listen stats :9000 #Listen on localhost port 9000
-    mode http
-    stats enable #Enable statistics
-    stats hide-version #Hide HAPRoxy version
-    stats realm haproxy-consul router
-    stats uri /stats #The URI of the stats page, in this case localhost:9000/haproxy_stats
-    stats auth tmo:tmo #Set a username and password

@@ -21,7 +21,4 @@ ADD config/ /consul-template/config.d/
 ADD template/ /consul-template/template.d/
 ADD launch.sh /launch.sh
 
-# Stats page
-EXPOSE 9000
-
 CMD ["/launch.sh"]
