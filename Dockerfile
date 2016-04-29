@@ -1,6 +1,7 @@
 FROM alpine:3.3
 
-MAINTAINER Steven Borrelli <steve@aster.is>
+#Forked from CiscoCloud, original maintainerSteven Borrelli <steve@aster.is>
+MAINTAINER Ben Whaley <ben@whaletech.co>
 
 ENV CONSUL_TEMPLATE_VERSION=0.14.0
 
@@ -19,5 +20,8 @@ RUN mkdir -p /haproxy /consul-template/config.d /consul-template/template.d
 ADD config/ /consul-template/config.d/
 ADD template/ /consul-template/template.d/
 ADD launch.sh /launch.sh
+
+# Stats page
+EXPOSE 9000
 
 CMD ["/launch.sh"]
