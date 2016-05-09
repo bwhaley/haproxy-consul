@@ -44,7 +44,7 @@ docker build -t haproxy .
 haproxy-consul can run in two different modes: forwarding either consul services
 (the default) or Marathon apps. This behavior is controlled by the
 `HAPROXY_MODE` variable, which should be set to `consul` or
-`marathon` or `marathon-sni`.
+`marathon` or `marathon-sni` or `marathon-edge`.
 
 #### consul Configuration
 

@@ -24,10 +24,11 @@ Configure using the following environment variables:
                         (default: example.com for app.example.com)
 
   HAPROXY_MODE          The mode for template rendering
-                        default "consul" for Consul services, 
+                        default "consul" for Consul services,
                         can also be set to
                           "marathon" for Marathon apps through marathon-consul (CiscoCloud)
                           "marathon-sni" for Marathon apps with SNI for TLS services
+                          "marathon-edge" for an edge proxy receiving connections from the public-facing HAProxy 
 
 Consul-template variables:
   CONSUL_TEMPLATE       Location of consul-template bin

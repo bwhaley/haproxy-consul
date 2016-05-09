@@ -1,0 +1,66 @@
+# Edge of the mesos cluster
+# Inbound requests from enterprise HAProxy, backend requests to the specified service
+global
+    maxconn {{or (key "service/haproxy/maxconn") 8000}}
+    debug
+    log {{or (key "service/haproxy/logserver") "172.18.0.1"}} local0
+    # Recommended SSL ciphers as per https://hynek.me/articles/hardening-your-web-servers-ssl-ciphers/
+    ssl-default-bind-options no-sslv3
+    ssl-default-bind-ciphers ECDH+AESGCM:DH+AESGCM:ECDH+AES256:DH+AES256:ECDH+AES128:DH+AES:ECDH+3DES:DH+3DES:RSA+AESGCM:RSA+AES:RSA+3DES:!aNULL:!MD5:!DSS
+    ssl-default-server-options no-sslv3
+    ssl-default-server-ciphers ECDH+AESGCM:DH+AESGCM:ECDH+AES256:DH+AES256:ECDH+AES128:DH+AES:ECDH+3DES:DH+3DES:RSA+AESGCM:RSA+AES:RSA+3DES:!aNULL:!MD5:!DSS
+    tune.ssl.default-dh-param 2048
+
+    stats socket /var/run/haproxy.sock mode 600 level admin
+    stats timeout 2m #Wait up to 2 minutes for input
+
+defaults
+    mode http
+    option forwardfor
+    option http-server-close
+    timeout connect {{or (key "service/haproxy/timeouts/connect") "5000ms"}}
+    timeout client {{or (key "service/haproxy/timeouts/client") "50000ms"}}
+    timeout server {{or (key "service/haproxy/timeouts/server") "50000ms"}}
+
+### HTTP frontend ###
+frontend www
+    bind *:80
+
+    reqadd X-Forwarded-Proto:\ http if !{ ssl_fc }
+
+  {{range ls "marathon" -}}
+    {{with $root := . -}}
+    {{with $app := parseJSON $root.Value -}}
+    {{with $tasks := ls (printf "marathon/%s/tasks" $root.Key) -}}
+    {{if eq (print $app.labels.HAPROXY_HTTP) "true" -}}
+    {{with $localName := index $app.labels (printf "HTTP_PORT_IDX_%d_NAME" $index) -}}
+    # {{$localName}}
+    use_backend {{$localName}}_backend if { hdr(host) -i {{$localName}}.{{or (env "HAPROXY_DOMAIN") "haproxy.service.consul"}} }
+    {{end}}{{/* end with localName */ -}}
+    {{end}}{{/* end of if eq printf */ -}}
+    {{end}}{{end}}{{end}}{{/* end of with $root, $app, and $tasks */ -}}
+  {{end}}{{/* end of range "marathon" */}}
+
+### HTTP backends ###
+{{range ls "marathon" -}}
+{{with $root := . -}}
+{{with $app := parseJSON $root.Value -}}
+{{if eq (print $app.labels.HAPROXY_HTTP) "true" -}}
+# {{$root.Key}} backends
+{{range $index, $port := $app.ports -}}
+{{with $localName := index $app.labels (printf "HTTP_PORT_IDX_%d_NAME" $index) -}}
+{{with $tasks := ls (printf "marathon/%s/tasks" $root.Key) -}}
+backend {{$localName}}_backend
+    mode http
+    {{range $taskIndex, $taskJson := $tasks -}}
+    {{with $task := parseJSON $taskJson.Value -}}
+    server {{$task.id}} {{$task.host}}:{{index $task.ports $index}}
+    {{end}}{{/* end for with $task */ -}}
+    {{end}}{{/* end for range $taskIndex, $taskJson... */ -}}
+{{end}}{{/* end for with $tasks */ -}}
+{{end}}{{/* end with $localName */ -}}
+{{end}}{{/* end range over $app.ports */ -}}
+{{end}}{{/* end if eq ... */ -}}
+{{end}}{{/* end with $app */ -}}
+{{end}}{{/* end with $root */ -}}
+{{end}}{{/* end range over marathon tasks */}}
