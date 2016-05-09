@@ -33,10 +33,12 @@ frontend www
     {{with $app := parseJSON $root.Value -}}
     {{with $tasks := ls (printf "marathon/%s/tasks" $root.Key) -}}
     {{if eq (print $app.labels.HAPROXY_HTTP) "true" -}}
+    {{range $index, $port := $app.ports -}}
     {{with $localName := index $app.labels (printf "HTTP_PORT_IDX_%d_NAME" $index) -}}
     # {{$localName}}
     use_backend {{$localName}}_backend if { hdr(host) -i {{$localName}}.{{or (env "HAPROXY_DOMAIN") "haproxy.service.consul"}} }
     {{end}}{{/* end with localName */ -}}
+    {{end}}{{/* end range over $app.ports */ -}}
     {{end}}{{/* end of if eq printf */ -}}
     {{end}}{{end}}{{end}}{{/* end of with $root, $app, and $tasks */ -}}
   {{end}}{{/* end of range "marathon" */}}
