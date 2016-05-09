@@ -12,7 +12,7 @@ defaults
     timeout server {{or (key "service/haproxy/timeouts/server") "50000ms"}}
 
 # HTTP Frontends
-frontend sni
+frontend http
     mode tcp
     bind *:80
     log global
@@ -42,25 +42,22 @@ frontend sni
 # {{$root.Key}} backends
 {{range $index, $port := $app.ports -}}
 {{with $localName := index $app.labels (printf "HTTP_PORT_IDX_%d_NAME" $index) -}}
-{{with $tasks := ls (printf "marathon/%s/tasks" $root.Key) -}}
+{{with $tasks := ls (printf "marathon/%s/tasks" $root.Key)}}
 backend {{$localName}}_backend
     mode http
     {{range $taskIndex, $taskJson := $tasks -}}
     {{with $task := parseJSON $taskJson.Value -}}
     server {{$task.id}} {{$task.host}}:{{index $task.ports $index}} # {{$task.taskStatus}}
-{{end}}{{/* end for with $task */ -}}
-{{end}}{{/* end for range $taskIndex, $taskJson... */ -}}
-{{else}}{{/* else for with $tasks */ -}}
-# no tasks for backend, not generating
-{{end}}{{/* end for with $tasks */ -}}
-{{else}}{{/* else for with $localName */ -}}
-## no HTTP forwarding information for {{$port}}
-{{end}}{{/* end with $localName */ -}}
-{{end}}{{/* end range over $app.ports */ -}}
+    {{end}}{{/* end for with $task */ -}}
+    {{end}}{{/* end for range $taskIndex, $taskJson... */ -}}
+    {{end}}{{/* end for with $tasks */ -}}
+    {{end}}{{/* end with $localName */ -}}
+{{end}}{{/* end range over $app.ports */}}
+
 {{end}}{{/* end if eq ... */ -}}
 {{else}}{{end}}{{/* else and end with $app */ -}}
 {{end}}{{/* end with $root */ -}}
-{{end}}{{/* end range over marathon tasks */ -}}
+{{end}}{{/* end range over marathon tasks */}}
 
 
 # TLS passthrough with SNI frontend
@@ -125,7 +122,7 @@ backend {{$localName}}_backend
     {{range $taskIndex, $taskJson := $tasks -}}
     {{with $task := parseJSON $taskJson.Value -}}
     server {{$task.id}} {{$task.host}}:{{index $task.ports $index}} check # {{$task.taskStatus}}
-    {{end}}{{/* end for with $task with newline */ }}
+    {{end}}{{/* end for with $task with newline */}}
     {{end}}{{/* end for range $taskIndex, $taskJson... */ -}}
     {{end}}{{/* end for with $tasks */ -}}
     {{end}}{{/* end with $localName */ -}}
